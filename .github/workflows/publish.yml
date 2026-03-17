@@ -1,0 +1,76 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  release-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        uses: orhun/git-cliff-action@v3
+        with:
+          config: .github/cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: CHANGELOG.md
+
+      - name: Update release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+          MODULE: github.com/${{ github.repository }}
+        run: |
+          CHANGELOG=$(cat CHANGELOG.md 2>/dev/null || echo "")
+
+          NOTES=$(cat <<RELEASE_NOTES
+          ## Installation
+
+          ### Go install (recommended)
+          \`\`\`bash
+          go install ${MODULE}@${TAG}
+          \`\`\`
+
+          ### From source
+          \`\`\`bash
+          git clone https://github.com/${GITHUB_REPOSITORY}.git
+          cd $(basename ${GITHUB_REPOSITORY})
+          CGO_ENABLED=0 go build -o docsgraph .
+          \`\`\`
+
+          ### Quick start
+          \`\`\`bash
+          # Copy sample config
+          mkdir -p ~/.docsgraph
+          curl -sSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${TAG}/config.example.yaml \
+            -o ~/.docsgraph/config.yaml
+
+          # Index documents
+          docsgraph index ./your-docs/
+
+          # Finalize graph (community detection)
+          docsgraph index --finalize
+
+          # Start MCP + Web UI server
+          docsgraph serve --port 8080
+          # Web UI  → http://localhost:8080
+          # MCP SSE → http://localhost:8080/mcp/sse
+          # REST API → http://localhost:8080/api/
+          \`\`\`
+
+          ## What's Changed
+          ${CHANGELOG}
+          RELEASE_NOTES
+          )
+
+          gh release edit "$TAG" --notes "$NOTES"
