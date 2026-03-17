@@ -1,41 +1,29 @@
 package llm
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 
 	"github.com/RandomCodeSpace/docsgraphcontext/internal/config"
-	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/llms/ollama"
 )
 
 type ollamaProvider struct {
-	chatLLM    *ollama.LLM
-	embedLLM   *ollama.LLM
+	baseURL    string
 	chatModel  string
 	embedModel string
+	client     *http.Client
 }
 
 func newOllamaProvider(cfg *config.LLMConfig) (Provider, error) {
-	chatLLM, err := ollama.New(
-		ollama.WithServerURL(cfg.Ollama.BaseURL),
-		ollama.WithModel(cfg.Ollama.ChatModel),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("ollama chat: %w", err)
-	}
-	embedLLM, err := ollama.New(
-		ollama.WithServerURL(cfg.Ollama.BaseURL),
-		ollama.WithModel(cfg.Ollama.EmbedModel),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("ollama embed: %w", err)
-	}
 	return &ollamaProvider{
-		chatLLM:    chatLLM,
-		embedLLM:   embedLLM,
+		baseURL:    cfg.Ollama.BaseURL,
 		chatModel:  cfg.Ollama.ChatModel,
 		embedModel: cfg.Ollama.EmbedModel,
+		client:     &http.Client{},
 	}, nil
 }
 
@@ -44,24 +32,55 @@ func (p *ollamaProvider) ModelID() string { return p.chatModel }
 
 func (p *ollamaProvider) Complete(ctx context.Context, prompt string, opts ...Option) (string, error) {
 	o := applyOptions(opts)
-	callOpts := []llms.CallOption{
-		llms.WithMaxTokens(o.maxTokens),
-		llms.WithTemperature(o.temperature),
+
+	reqBody := map[string]any{
+		"model":  p.chatModel,
+		"prompt": prompt,
+		"stream": false,
+		"options": map[string]any{
+			"num_predict": o.maxTokens,
+			"temperature": o.temperature,
+		},
 	}
 	if o.jsonMode {
-		callOpts = append(callOpts, llms.WithJSONMode())
+		reqBody["format"] = "json"
 	}
-	resp, err := llms.GenerateFromSinglePrompt(ctx, p.chatLLM, prompt, callOpts...)
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("ollama complete marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/api/generate", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("ollama complete request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("ollama complete: %w", err)
 	}
-	return resp, nil
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("ollama complete HTTP %d: %s", resp.StatusCode, b)
+	}
+
+	var result struct {
+		Response string `json:"response"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("ollama complete decode: %w", err)
+	}
+	return result.Response, nil
 }
 
 func (p *ollamaProvider) Embed(ctx context.Context, text string) ([]float32, error) {
-	vecs, err := p.embedLLM.CreateEmbedding(ctx, []string{text})
+	vecs, err := p.EmbedBatch(ctx, []string{text})
 	if err != nil {
-		return nil, fmt.Errorf("ollama embed: %w", err)
+		return nil, err
 	}
 	if len(vecs) == 0 {
 		return nil, fmt.Errorf("ollama embed: empty response")
@@ -70,5 +89,37 @@ func (p *ollamaProvider) Embed(ctx context.Context, text string) ([]float32, err
 }
 
 func (p *ollamaProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
-	return p.embedLLM.CreateEmbedding(ctx, texts)
+	reqBody := map[string]any{
+		"model": p.embedModel,
+		"input": texts,
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("ollama embed marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/api/embed", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("ollama embed request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ollama embed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("ollama embed HTTP %d: %s", resp.StatusCode, b)
+	}
+
+	var result struct {
+		Embeddings [][]float32 `json:"embeddings"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("ollama embed decode: %w", err)
+	}
+	return result.Embeddings, nil
 }
