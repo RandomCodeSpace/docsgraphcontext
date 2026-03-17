@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/config"
+	"github.com/RandomCodeSpace/docscontext/internal/config"
 )
 
 type ollamaProvider struct {
@@ -123,3 +123,4 @@ func (p *ollamaProvider) EmbedBatch(ctx context.Context, texts []string) ([][]fl
 	}
 	return result.Embeddings, nil
 }
+

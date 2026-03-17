@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/llm"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/pipeline"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/store"
+	"github.com/RandomCodeSpace/docscontext/internal/llm"
+	"github.com/RandomCodeSpace/docscontext/internal/pipeline"
+	"github.com/RandomCodeSpace/docscontext/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -99,3 +99,4 @@ func init() {
 	indexCmd.Flags().IntVar(&indexMaxDepth, "max-depth", 0, "Maximum BFS link depth (0 = unlimited)")
 	indexCmd.Flags().BoolVar(&indexSkipSitemap, "skip-sitemap", false, "Force BFS crawl even if sitemap.xml exists")
 }
+

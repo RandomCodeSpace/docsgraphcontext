@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/search"
+	"github.com/RandomCodeSpace/docscontext/internal/search"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -300,3 +300,4 @@ func registerTools(s *Server) {
 		return toolText(string(b)), nil
 	}))
 }
+

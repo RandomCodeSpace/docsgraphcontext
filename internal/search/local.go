@@ -4,8 +4,8 @@ import (
 	"context"
 	"sort"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/embedder"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/store"
+	"github.com/RandomCodeSpace/docscontext/internal/embedder"
+	"github.com/RandomCodeSpace/docscontext/internal/store"
 )
 
 // ChunkResult is a search result from chunk/vector search.
@@ -123,3 +123,4 @@ func LocalSearch(ctx context.Context, st *store.Store, emb *embedder.Embedder, q
 
 	return result, nil
 }
+

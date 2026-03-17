@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/llm"
+	"github.com/RandomCodeSpace/docscontext/internal/llm"
 )
 
 // Entity extracted from document text.
@@ -88,3 +88,4 @@ func stripCodeFences(s string) string {
 	}
 	return strings.TrimSpace(s)
 }
+

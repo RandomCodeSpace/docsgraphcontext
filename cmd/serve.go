@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/api"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/embedder"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/llm"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/store"
+	"github.com/RandomCodeSpace/docscontext/internal/api"
+	"github.com/RandomCodeSpace/docscontext/internal/embedder"
+	"github.com/RandomCodeSpace/docscontext/internal/llm"
+	"github.com/RandomCodeSpace/docscontext/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -92,3 +92,4 @@ func init() {
 	serveCmd.Flags().StringVar(&serveHost, "host", "", "Server host (overrides config)")
 	serveCmd.Flags().IntVar(&servePort, "port", 0, "Server port (overrides config)")
 }
+

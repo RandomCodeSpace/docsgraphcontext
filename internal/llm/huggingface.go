@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/config"
+	"github.com/RandomCodeSpace/docscontext/internal/config"
 )
 
 // huggingFaceProvider calls a local TGI (Text Generation Inference) endpoint.
@@ -107,3 +107,4 @@ func (p *huggingFaceProvider) EmbedBatch(ctx context.Context, texts []string) ([
 	}
 	return result, nil
 }
+

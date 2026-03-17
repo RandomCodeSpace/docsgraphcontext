@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/config"
+	"github.com/RandomCodeSpace/docscontext/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -16,9 +16,9 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "docsgraph",
-	Short: "DocsGraphContext — Pure Go GraphRAG MCP server",
-	Long: `DocsGraphContext ingests unstructured documents, builds a knowledge graph
+	Use:   "DocsContext",
+	Short: "DocsContext — Pure Go GraphRAG MCP server",
+	Long: `DocsContext ingests unstructured documents, builds a knowledge graph
 with community detection, and exposes an MCP server + embedded Web UI.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -33,7 +33,7 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default ~/.docsgraph/config.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default ~/.DocsContext/config.yaml)")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "Log level: debug, info, warn, error")
 }
 
@@ -63,3 +63,6 @@ func initConfig() {
 		os.Exit(1)
 	}
 }
+
+
+

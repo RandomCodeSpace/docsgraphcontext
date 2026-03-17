@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/config"
+	"github.com/RandomCodeSpace/docscontext/internal/config"
 )
 
 type azureProvider struct {
@@ -144,3 +144,4 @@ func (p *azureProvider) EmbedBatch(ctx context.Context, texts []string) ([][]flo
 	}
 	return vecs, nil
 }
+

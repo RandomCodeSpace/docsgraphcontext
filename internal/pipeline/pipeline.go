@@ -13,15 +13,15 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/chunker"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/community"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/config"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/crawler"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/embedder"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/extractor"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/llm"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/loader"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/store"
+	"github.com/RandomCodeSpace/docscontext/internal/chunker"
+	"github.com/RandomCodeSpace/docscontext/internal/community"
+	"github.com/RandomCodeSpace/docscontext/internal/config"
+	"github.com/RandomCodeSpace/docscontext/internal/crawler"
+	"github.com/RandomCodeSpace/docscontext/internal/embedder"
+	"github.com/RandomCodeSpace/docscontext/internal/extractor"
+	"github.com/RandomCodeSpace/docscontext/internal/llm"
+	"github.com/RandomCodeSpace/docscontext/internal/loader"
+	"github.com/RandomCodeSpace/docscontext/internal/store"
 	"github.com/google/uuid"
 	"github.com/schollz/progressbar/v3"
 )
@@ -862,3 +862,4 @@ func min(a, b int) int {
 	}
 	return b
 }
+

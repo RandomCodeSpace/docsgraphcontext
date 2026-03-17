@@ -1,4 +1,4 @@
-# DocsGraphContext
+# DocsContext
 
 A pure Go ([CGO_ENABLED=0](https://pkg.go.dev/cmd/cgo)) GraphRAG tool inspired by [Microsoft GraphRAG](https://github.com/microsoft/graphrag).
 Ingests unstructured documents, builds a hierarchical knowledge graph with community detection, and exposes an **MCP server + embedded Web UI** on a single port.
@@ -16,46 +16,46 @@ Ingests unstructured documents, builds a hierarchical knowledge graph with commu
 ## Install
 
 ```bash
-go install github.com/RandomCodeSpace/docsgraphcontext@latest
+go install github.com/RandomCodeSpace/docscontext@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/RandomCodeSpace/docsgraphcontext.git
-cd docsgraphcontext
-CGO_ENABLED=0 go build -o docsgraph .
+git clone https://github.com/RandomCodeSpace/docscontext.git
+cd DocsContext
+CGO_ENABLED=0 go build -o docscontext .
 ```
 
 ## Quick Start
 
 ```bash
 # 1. Create config
-mkdir -p ~/.docsgraph
-cp config.example.yaml ~/.docsgraph/config.yaml
-# Edit ~/.docsgraph/config.yaml — set your LLM provider
+mkdir -p ~/.docscontext
+cp config.example.yaml ~/.docscontext/config.yaml
+# Edit ~/.docscontext/config.yaml — set your LLM provider
 
 # 2. Index documents (Phases 1-2: load, chunk, embed, extract entities)
-docsgraph index ./your-docs/ --workers 4
+docscontext index ./your-docs/ --workers 4
 
 # 3. Build knowledge graph (Phases 3-4: community detection + summaries)
-docsgraph index --finalize
+docscontext index --finalize
 
 # 4. Check stats
-docsgraph stats
+docscontext stats
 
 # 5. Start server
-docsgraph serve --port 8080
+docscontext serve --port 8080
 ```
 
 Open **http://localhost:8080** for the Web UI.
 
 ## Configuration
 
-Copy `config.example.yaml` to `~/.docsgraph/config.yaml` and edit:
+Copy `config.example.yaml` to `~/.docscontext/config.yaml` and edit:
 
 ```yaml
-data_dir: ~/.docsgraph/data
+data_dir: ~/.docscontext/data
 
 llm:
   provider: ollama          # azure | ollama | huggingface
@@ -82,29 +82,29 @@ server:
   port: 8080
 ```
 
-Environment variable overrides use the `DOCSGRAPH_` prefix:
+Environment variable overrides use the `docscontext_` prefix:
 
 ```bash
-DOCSGRAPH_LLM_PROVIDER=azure
-DOCSGRAPH_LLM_AZURE_API_KEY=sk-...
-DOCSGRAPH_SERVER_PORT=9090
+docscontext_LLM_PROVIDER=azure
+docscontext_LLM_AZURE_API_KEY=sk-...
+docscontext_SERVER_PORT=9090
 ```
 
 ## CLI
 
 ```bash
 # Index a file or directory
-docsgraph index ./docs/ [--force] [--workers 4] [--verbose]
+docscontext index ./docs/ [--force] [--workers 4] [--verbose]
 
 # Run community detection + LLM summaries
-docsgraph index --finalize
+docscontext index --finalize
 
 # Show statistics
-docsgraph stats
-docsgraph stats --json
+docscontext stats
+docscontext stats --json
 
 # Start MCP + Web UI server
-docsgraph serve [--port 8080] [--host 127.0.0.1]
+docscontext serve [--port 8080] [--host 127.0.0.1]
 ```
 
 ## MCP Tools
@@ -161,7 +161,7 @@ Document In
   LLM → JSON summary → SQLite
 ```
 
-All data lives in a single SQLite file at `$DATA_DIR/docsgraph.db`.
+All data lives in a single SQLite file at `$DATA_DIR/docscontext.db`.
 
 ## Supported File Types
 
@@ -177,3 +177,4 @@ All data lives in a single SQLite file at `$DATA_DIR/docsgraph.db`.
 ## License
 
 MIT
+

@@ -17,7 +17,7 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/loader"
+	"github.com/RandomCodeSpace/docscontext/internal/loader"
 )
 
 // Page is a fetched documentation page.
@@ -299,3 +299,4 @@ func isSameOrigin(rawURL string, base *url.URL) bool {
 	}
 	return u.Host == base.Host && strings.HasPrefix(u.Path, base.Path)
 }
+

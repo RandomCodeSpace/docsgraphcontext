@@ -39,25 +39,25 @@ jobs:
           ```bash
           git clone https://github.com/{repo}.git
           cd {repo.split('/')[-1]}
-          CGO_ENABLED=0 go build -o docsgraph .
+          CGO_ENABLED=0 go build -o DocsContext .
           ```
 
           ## Quick start
 
           ```bash
           # Copy sample config
-          mkdir -p ~/.docsgraph
+          mkdir -p ~/.DocsContext
           curl -sSL https://raw.githubusercontent.com/{repo}/{tag}/config.example.yaml \\
-            -o ~/.docsgraph/config.yaml
+            -o ~/.DocsContext/config.yaml
 
           # Index documents
-          docsgraph index ./your-docs/
+          DocsContext index ./your-docs/
 
           # Build knowledge graph (community detection)
-          docsgraph index --finalize
+          DocsContext index --finalize
 
           # Start server  (Web UI + MCP + REST API)
-          docsgraph serve --port 8080
+          DocsContext serve --port 8080
           ```
 
           | Endpoint | URL |
@@ -75,3 +75,4 @@ jobs:
               check=True
           )
           PYEOF
+

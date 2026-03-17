@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/llm"
+	"github.com/RandomCodeSpace/docscontext/internal/llm"
 )
 
 // Embedder batches text → []float32 vectors using an LLM provider.
@@ -85,3 +85,4 @@ func (e *Embedder) EmbedTexts(ctx context.Context, texts []string) ([][]float32,
 func (e *Embedder) EmbedOne(ctx context.Context, text string) ([]float32, error) {
 	return e.provider.Embed(ctx, text)
 }
+

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/config"
+	"github.com/RandomCodeSpace/docscontext/internal/config"
 )
 
 // Option configures LLM completion.
@@ -50,3 +50,4 @@ func NewProvider(cfg *config.LLMConfig) (Provider, error) {
 		return nil, fmt.Errorf("unknown LLM provider: %s", cfg.Provider)
 	}
 }
+

@@ -3,10 +3,10 @@ package mcp
 import (
 	"net/http"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/config"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/embedder"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/llm"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/store"
+	"github.com/RandomCodeSpace/docscontext/internal/config"
+	"github.com/RandomCodeSpace/docscontext/internal/embedder"
+	"github.com/RandomCodeSpace/docscontext/internal/llm"
+	"github.com/RandomCodeSpace/docscontext/internal/store"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -30,7 +30,7 @@ func New(st *store.Store, prov llm.Provider, emb *embedder.Embedder, cfg *config
 		cfg:      cfg,
 	}
 	s.mcpServer = server.NewMCPServer(
-		"docsgraphcontext",
+		"DocsContext",
 		"1.0.0",
 		server.WithToolCapabilities(true),
 	)
@@ -75,3 +75,6 @@ func stringArg(args map[string]any, key string, def string) string {
 	}
 	return def
 }
+
+
+

@@ -69,8 +69,8 @@ func Load(cfgFile string) (*Config, error) {
 
 	// Defaults
 	home, _ := os.UserHomeDir()
-	defaultDataDir := filepath.Join(home, ".docsgraph", "data")
-	defaultCfgDir := filepath.Join(home, ".docsgraph")
+	defaultDataDir := filepath.Join(home, ".DocsContext", "data")
+	defaultCfgDir := filepath.Join(home, ".DocsContext")
 
 	v.SetDefault("data_dir", defaultDataDir)
 	v.SetDefault("llm.provider", "ollama")
@@ -105,7 +105,7 @@ func Load(cfgFile string) (*Config, error) {
 	}
 
 	// Env overrides
-	v.SetEnvPrefix("DOCSGRAPH")
+	v.SetEnvPrefix("DocsContext")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
@@ -129,5 +129,6 @@ func Load(cfgFile string) (*Config, error) {
 }
 
 func (c *Config) DBPath() string {
-	return filepath.Join(c.DataDir, "docsgraph.db")
+	return filepath.Join(c.DataDir, "DocsContext.db")
 }
+

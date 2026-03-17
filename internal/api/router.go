@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/config"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/embedder"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/llm"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/mcp"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/store"
-	"github.com/RandomCodeSpace/docsgraphcontext/ui"
+	"github.com/RandomCodeSpace/docscontext/internal/config"
+	"github.com/RandomCodeSpace/docscontext/internal/embedder"
+	"github.com/RandomCodeSpace/docscontext/internal/llm"
+	"github.com/RandomCodeSpace/docscontext/internal/mcp"
+	"github.com/RandomCodeSpace/docscontext/internal/store"
+	"github.com/RandomCodeSpace/docscontext/ui"
 )
 
 // NewRouter builds the single http.ServeMux with all routes.
@@ -76,3 +76,4 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.status = code
 	rw.ResponseWriter.WriteHeader(code)
 }
+

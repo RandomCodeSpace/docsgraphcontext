@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/llm"
+	"github.com/RandomCodeSpace/docscontext/internal/llm"
 )
 
 // CommunityReport holds LLM-generated community metadata.
@@ -65,3 +65,4 @@ func Summarize(ctx context.Context, provider llm.Provider, entityDescriptions []
 	}
 	return report, nil
 }
+

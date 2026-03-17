@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/llm"
+	"github.com/RandomCodeSpace/docscontext/internal/llm"
 )
 
 // Claim is a factual covariate extracted from text.
@@ -57,3 +57,4 @@ func ExtractClaims(ctx context.Context, provider llm.Provider, chunks []string) 
 	}
 	return result.Claims, nil
 }
+

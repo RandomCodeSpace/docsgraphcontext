@@ -1,4 +1,4 @@
-module github.com/RandomCodeSpace/docsgraphcontext
+module github.com/RandomCodeSpace/docscontext
 
 go 1.25.0
 

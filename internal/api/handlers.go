@@ -11,12 +11,12 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/config"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/embedder"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/llm"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/pipeline"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/search"
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/store"
+	"github.com/RandomCodeSpace/docscontext/internal/config"
+	"github.com/RandomCodeSpace/docscontext/internal/embedder"
+	"github.com/RandomCodeSpace/docscontext/internal/llm"
+	"github.com/RandomCodeSpace/docscontext/internal/pipeline"
+	"github.com/RandomCodeSpace/docscontext/internal/search"
+	"github.com/RandomCodeSpace/docscontext/internal/store"
 )
 
 type handlers struct {
@@ -266,7 +266,7 @@ func (h *handlers) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tmpDir, err := os.MkdirTemp("", "docsgraph-upload-*")
+	tmpDir, err := os.MkdirTemp("", "DocsContext-upload-*")
 	if err != nil {
 		writeError(w, r, 500, err.Error(), err)
 		return
@@ -359,3 +359,5 @@ func intQuery(s string, def int) int {
 	}
 	return n
 }
+
+

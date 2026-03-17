@@ -1,4 +1,4 @@
-// DocsGraphContext SPA
+// DocsContext SPA
 
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -127,7 +127,7 @@ async function loadCommunities() {
     const params = level >= 0 ? '?level=' + level : '';
     const comms = await api('/communities' + params);
     if (!comms || !comms.length) {
-      el.innerHTML = '<div class="empty">No communities yet. Run <code>docsgraph index --finalize</code>.</div>';
+      el.innerHTML = '<div class="empty">No communities yet. Run <code>DocsContext index --finalize</code>.</div>';
       return;
     }
     el.innerHTML = comms.map(c =>
@@ -254,3 +254,5 @@ function formatBytes(n) {
 window.addEventListener('load', () => {
   loadStats();
 });
+
+

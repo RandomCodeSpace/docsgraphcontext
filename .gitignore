@@ -1,8 +1,8 @@
 # Binaries
-docsgraph
-docsgraph.exe
-docsgraph-linux
-docsgraph-*
+DocsContext
+DocsContext.exe
+DocsContext-linux
+DocsContext-*
 
 # Data
 *.db
@@ -15,3 +15,4 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+

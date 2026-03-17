@@ -6,7 +6,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/RandomCodeSpace/docsgraphcontext/internal/store"
+	"github.com/RandomCodeSpace/docscontext/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -49,3 +49,4 @@ func init() {
 	rootCmd.AddCommand(statsCmd)
 	statsCmd.Flags().BoolVar(&statsJSON, "json", false, "Output as JSON")
 }
+
