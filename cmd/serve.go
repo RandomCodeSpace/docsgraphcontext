@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -26,7 +27,6 @@ var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start MCP + Web UI server",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Override config with CLI flags
 		if serveHost != "" {
 			cfg.Server.Host = serveHost
 		}
@@ -39,11 +39,13 @@ var serveCmd = &cobra.Command{
 			return fmt.Errorf("open store: %w", err)
 		}
 		defer st.Close()
+		slog.Info("store opened", "path", cfg.DBPath())
 
 		prov, err := llm.NewProvider(&cfg.LLM)
 		if err != nil {
 			return fmt.Errorf("llm provider: %w", err)
 		}
+		slog.Info("LLM provider initialised", "provider", prov.Name(), "model", prov.ModelID())
 
 		emb := embedder.New(prov, cfg.Indexing.BatchSize)
 		router := api.NewRouter(st, prov, emb, cfg)
@@ -56,27 +58,32 @@ var serveCmd = &cobra.Command{
 
 		srv := &http.Server{Handler: router, ReadTimeout: 60 * time.Second, WriteTimeout: 120 * time.Second}
 
-		fmt.Fprintf(os.Stderr, "DocsGraphContext server running on http://%s\n", addr)
-		fmt.Fprintf(os.Stderr, "  Web UI:  http://%s/\n", addr)
-		fmt.Fprintf(os.Stderr, "  MCP:     http://%s/mcp\n", addr)
-		fmt.Fprintf(os.Stderr, "  API:     http://%s/api/\n", addr)
-		fmt.Fprintf(os.Stderr, "  LLM:     %s (%s)\n", prov.Name(), prov.ModelID())
+		slog.Info("server started",
+			"addr", "http://"+addr,
+			"ui", "http://"+addr+"/",
+			"mcp", "http://"+addr+"/mcp",
+			"api", "http://"+addr+"/api/",
+		)
 
-		// Graceful shutdown
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
 		go func() {
 			if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-				fmt.Fprintln(os.Stderr, "server error:", err)
+				slog.Error("server error", "err", err)
 			}
 		}()
 
 		<-ctx.Done()
-		fmt.Fprintln(os.Stderr, "\nShutting down...")
+		slog.Info("shutting down...")
 		shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		return srv.Shutdown(shutCtx)
+		if err := srv.Shutdown(shutCtx); err != nil {
+			slog.Error("shutdown error", "err", err)
+			return err
+		}
+		slog.Info("shutdown complete")
+		return nil
 	},
 }
 

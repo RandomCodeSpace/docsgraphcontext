@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -53,18 +54,28 @@ func Crawl(ctx context.Context, rootURL string, opts Options) ([]*Page, error) {
 	// Try sitemap first
 	var urls []string
 	if !opts.SkipSitemap {
-		urls, _ = discoverSitemap(client, base)
+		urls, err = discoverSitemap(client, base)
+		if err != nil {
+			slog.Debug("sitemap not found, falling back to BFS", "url", rootURL, "reason", err)
+		} else {
+			slog.Info("sitemap discovered", "url", rootURL, "urls", len(urls))
+		}
 	}
 
 	// Fall back to BFS
 	if len(urls) == 0 {
+		slog.Info("starting BFS crawl", "url", rootURL, "max_pages", opts.MaxPages, "max_depth", opts.MaxDepth)
 		urls = bfsCrawl(ctx, client, base, opts)
+		slog.Info("BFS crawl complete", "url", rootURL, "pages_found", len(urls))
 	}
 
 	// Cap
 	if opts.MaxPages > 0 && len(urls) > opts.MaxPages {
+		slog.Debug("capping URLs at max_pages", "total", len(urls), "max_pages", opts.MaxPages)
 		urls = urls[:opts.MaxPages]
 	}
+
+	slog.Info("fetching pages", "count", len(urls), "concurrency", opts.Concurrency)
 
 	// Fetch pages concurrently
 	pages := make([]*Page, len(urls))
@@ -79,6 +90,9 @@ func Crawl(ctx context.Context, rootURL string, opts Options) ([]*Page, error) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			p, err := wl.LoadURL(pageURL)
+			if err != nil {
+				slog.Debug("failed to fetch page", "url", pageURL, "err", err)
+			}
 			pages[idx] = p
 			errs[idx] = err
 		}(i, u)
@@ -87,11 +101,19 @@ func Crawl(ctx context.Context, rootURL string, opts Options) ([]*Page, error) {
 
 	// Collect successful fetches
 	var result []*Page
+	var fetchErrs int
 	for i, p := range pages {
 		if errs[i] == nil && p != nil && strings.TrimSpace(p.Content) != "" {
 			result = append(result, p)
+		} else if errs[i] != nil {
+			fetchErrs++
 		}
 	}
+
+	if fetchErrs > 0 {
+		slog.Warn("some pages failed to fetch", "failed", fetchErrs, "succeeded", len(result))
+	}
+	slog.Info("crawl finished", "url", rootURL, "pages_fetched", len(result))
 	return result, nil
 }
 
@@ -119,6 +141,7 @@ func discoverSitemap(client *http.Client, base *url.URL) ([]string, error) {
 	for _, candidate := range candidates {
 		urls, err := parseSitemap(client, candidate, base)
 		if err == nil && len(urls) > 0 {
+			slog.Debug("sitemap parsed", "url", candidate, "entries", len(urls))
 			return urls, nil
 		}
 	}
@@ -140,6 +163,7 @@ func parseSitemap(client *http.Client, sitemapURL string, base *url.URL) ([]stri
 	// Try sitemap index first
 	var idx sitemapIndex
 	if err := xml.Unmarshal(body, &idx); err == nil && len(idx.Sitemaps) > 0 {
+		slog.Debug("sitemap index found", "url", sitemapURL, "sub_sitemaps", len(idx.Sitemaps))
 		var all []string
 		for _, s := range idx.Sitemaps {
 			sub, err := parseSitemap(client, s.Loc, base)
@@ -178,6 +202,7 @@ func bfsCrawl(ctx context.Context, client *http.Client, base *url.URL, opts Opti
 	for len(queue) > 0 && (opts.MaxPages == 0 || len(found) < opts.MaxPages) {
 		select {
 		case <-ctx.Done():
+			slog.Debug("BFS crawl cancelled by context", "pages_found", len(found))
 			return found
 		default:
 		}
@@ -196,6 +221,7 @@ func bfsCrawl(ctx context.Context, client *http.Client, base *url.URL, opts Opti
 		}
 
 		links := extractLinks(client, item.u, base)
+		slog.Debug("BFS page links extracted", "url", item.u, "depth", item.depth, "links", len(links))
 		for _, l := range links {
 			if !visited[l] {
 				queue = append(queue, struct {
@@ -211,12 +237,16 @@ func bfsCrawl(ctx context.Context, client *http.Client, base *url.URL, opts Opti
 func extractLinks(client *http.Client, pageURL string, base *url.URL) []string {
 	resp, err := client.Get(pageURL)
 	if err != nil || resp.StatusCode != http.StatusOK {
+		if err != nil {
+			slog.Debug("failed to fetch page for link extraction", "url", pageURL, "err", err)
+		}
 		return nil
 	}
 	defer resp.Body.Close()
 
 	doc, err := html.Parse(resp.Body)
 	if err != nil {
+		slog.Debug("failed to parse HTML", "url", pageURL, "err", err)
 		return nil
 	}
 

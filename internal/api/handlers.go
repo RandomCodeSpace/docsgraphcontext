@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ type handlers struct {
 	cfg      *config.Config
 
 	// Upload progress tracking
-	uploadMu   sync.Mutex
+	uploadMu    sync.Mutex
 	jobProgress []string
 }
 
@@ -35,14 +36,17 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
-func writeError(w http.ResponseWriter, status int, msg string) {
+func writeError(w http.ResponseWriter, r *http.Request, status int, msg string, err error) {
+	if status >= 500 && err != nil {
+		slog.ErrorContext(r.Context(), "handler error", "path", r.URL.Path, "err", err)
+	}
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
 func (h *handlers) getStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.store.GetStats(r.Context())
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 	writeJSON(w, 200, stats)
@@ -56,7 +60,7 @@ func (h *handlers) listDocuments(w http.ResponseWriter, r *http.Request) {
 
 	docs, err := h.store.ListDocuments(r.Context(), docType, limit, offset)
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 	writeJSON(w, 200, docs)
@@ -66,16 +70,16 @@ func (h *handlers) getDocumentVersions(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	doc, err := h.store.GetDocument(r.Context(), id)
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 	if doc == nil {
-		writeError(w, 404, "document not found")
+		writeError(w, r, 404, "document not found", nil)
 		return
 	}
 	versions, err := h.store.GetDocumentVersions(r.Context(), doc.CanonicalOrID())
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 	writeJSON(w, 200, versions)
@@ -85,11 +89,11 @@ func (h *handlers) getDocument(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	doc, err := h.store.GetDocument(r.Context(), id)
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 	if doc == nil {
-		writeError(w, 404, "document not found")
+		writeError(w, r, 404, "document not found", nil)
 		return
 	}
 	writeJSON(w, 200, doc)
@@ -97,7 +101,7 @@ func (h *handlers) getDocument(w http.ResponseWriter, r *http.Request) {
 
 type searchRequest struct {
 	Query          string `json:"query"`
-	Mode           string `json:"mode"`    // local | global
+	Mode           string `json:"mode"` // local | global
 	TopK           int    `json:"top_k"`
 	GraphDepth     int    `json:"graph_depth"`
 	CommunityLevel int    `json:"community_level"`
@@ -106,11 +110,11 @@ type searchRequest struct {
 func (h *handlers) search(w http.ResponseWriter, r *http.Request) {
 	var req searchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, 400, "invalid JSON")
+		writeError(w, r, 400, "invalid JSON", nil)
 		return
 	}
 	if req.Query == "" {
-		writeError(w, 400, "query required")
+		writeError(w, r, 400, "query required", nil)
 		return
 	}
 	if req.TopK <= 0 {
@@ -120,19 +124,21 @@ func (h *handlers) search(w http.ResponseWriter, r *http.Request) {
 		req.GraphDepth = 2
 	}
 
+	slog.InfoContext(r.Context(), "search request", "mode", req.Mode, "query", req.Query, "top_k", req.TopK)
+
 	ctx := r.Context()
 	switch req.Mode {
 	case "global":
 		result, err := search.GlobalSearch(ctx, h.store, h.embedder, h.provider, req.Query, req.CommunityLevel)
 		if err != nil {
-			writeError(w, 500, err.Error())
+			writeError(w, r, 500, err.Error(), err)
 			return
 		}
 		writeJSON(w, 200, result)
 	default: // local
 		result, err := search.LocalSearch(ctx, h.store, h.embedder, req.Query, req.TopK, req.GraphDepth)
 		if err != nil {
-			writeError(w, 500, err.Error())
+			writeError(w, r, 500, err.Error(), err)
 			return
 		}
 		writeJSON(w, 200, result)
@@ -146,14 +152,16 @@ func (h *handlers) graphNeighborhood(w http.ResponseWriter, r *http.Request) {
 	maxNodes := intQuery(q.Get("max_nodes"), 50)
 
 	if name == "" {
-		writeError(w, 400, "entity parameter required")
+		writeError(w, r, 400, "entity parameter required", nil)
 		return
 	}
+
+	slog.DebugContext(r.Context(), "graph neighborhood request", "entity", name, "depth", depth)
 
 	ctx := r.Context()
 	entity, err := h.store.GetEntityByName(ctx, name)
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 	if entity == nil {
@@ -163,7 +171,7 @@ func (h *handlers) graphNeighborhood(w http.ResponseWriter, r *http.Request) {
 
 	rels, err := h.store.RelationshipsForEntity(ctx, entity.ID, depth)
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 
@@ -198,6 +206,7 @@ func (h *handlers) graphNeighborhood(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	slog.DebugContext(r.Context(), "graph neighborhood result", "entity", name, "nodes", len(nodes), "edges", len(edges))
 	writeJSON(w, 200, map[string]any{"nodes": nodes, "edges": edges})
 }
 
@@ -209,7 +218,7 @@ func (h *handlers) listEntities(w http.ResponseWriter, r *http.Request) {
 
 	entities, err := h.store.ListEntities(r.Context(), typ, limit, offset)
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 	writeJSON(w, 200, entities)
@@ -221,7 +230,7 @@ func (h *handlers) listCommunities(w http.ResponseWriter, r *http.Request) {
 
 	communities, err := h.store.ListCommunities(r.Context(), level)
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 	writeJSON(w, 200, communities)
@@ -231,16 +240,16 @@ func (h *handlers) getCommunity(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	comm, err := h.store.GetCommunity(r.Context(), id)
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 	if comm == nil {
-		writeError(w, 404, "community not found")
+		writeError(w, r, 404, "community not found", nil)
 		return
 	}
 	members, err := h.store.CommunityMembers(r.Context(), id)
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"community": comm, "members": members})
@@ -248,18 +257,18 @@ func (h *handlers) getCommunity(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) upload(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(128 << 20); err != nil {
-		writeError(w, 400, "parse form: "+err.Error())
+		writeError(w, r, 400, "parse form: "+err.Error(), nil)
 		return
 	}
 	files := r.MultipartForm.File["files"]
 	if len(files) == 0 {
-		writeError(w, 400, "no files provided")
+		writeError(w, r, 400, "no files provided", nil)
 		return
 	}
 
 	tmpDir, err := os.MkdirTemp("", "docsgraph-upload-*")
 	if err != nil {
-		writeError(w, 500, err.Error())
+		writeError(w, r, 500, err.Error(), err)
 		return
 	}
 
@@ -268,41 +277,45 @@ func (h *handlers) upload(w http.ResponseWriter, r *http.Request) {
 		dst := filepath.Join(tmpDir, fh.Filename)
 		f, err := fh.Open()
 		if err != nil {
-			writeError(w, 500, err.Error())
+			writeError(w, r, 500, err.Error(), err)
 			return
 		}
 		out, err := os.Create(dst)
 		if err != nil {
 			f.Close()
-			writeError(w, 500, err.Error())
+			writeError(w, r, 500, err.Error(), err)
 			return
 		}
 		_, err = io.Copy(out, f)
 		f.Close()
 		out.Close()
 		if err != nil {
-			writeError(w, 500, err.Error())
+			writeError(w, r, 500, err.Error(), err)
 			return
 		}
 		paths = append(paths, dst)
 	}
 
 	jobID := fmt.Sprintf("job-%d", len(h.jobProgress))
+	slog.Info("upload job queued", "job_id", jobID, "files", len(paths))
+
 	h.uploadMu.Lock()
 	h.jobProgress = append(h.jobProgress, fmt.Sprintf("queued: %d files", len(paths)))
 	h.uploadMu.Unlock()
 
-	// Run indexing in background
 	go func() {
 		defer os.RemoveAll(tmpDir)
 		pl := pipeline.New(h.store, h.provider, h.cfg)
 		for _, p := range paths {
+			slog.Info("upload indexing file", "job_id", jobID, "file", filepath.Base(p))
 			h.setProgress(jobID, fmt.Sprintf("indexing: %s", filepath.Base(p)))
 			if err := pl.IndexPath(r.Context(), p, pipeline.IndexOptions{}); err != nil {
+				slog.Error("upload indexing failed", "job_id", jobID, "file", filepath.Base(p), "err", err)
 				h.setProgress(jobID, fmt.Sprintf("error: %v", err))
 				return
 			}
 		}
+		slog.Info("upload job complete", "job_id", jobID, "files", len(paths))
 		h.setProgress(jobID, "done")
 	}()
 

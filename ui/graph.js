@@ -4,6 +4,11 @@ function renderGraph(data) {
   const container = document.getElementById('graph-container');
   container.innerHTML = '';
 
+  if (typeof vis === 'undefined') {
+    container.innerHTML = '<div class="empty" style="padding:2rem;color:#f43f5e">vis-network failed to load. Check your internet connection — the graph library is loaded from unpkg.com.</div>';
+    return;
+  }
+
   if (!data || !data.nodes || !data.nodes.length) {
     container.innerHTML = '<div class="empty" style="padding:2rem">No graph data. Enter an entity name above.</div>';
     return;

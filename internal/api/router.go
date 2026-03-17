@@ -1,7 +1,9 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/RandomCodeSpace/docsgraphcontext/internal/config"
 	"github.com/RandomCodeSpace/docsgraphcontext/internal/embedder"
@@ -37,5 +39,40 @@ func NewRouter(st *store.Store, prov llm.Provider, emb *embedder.Embedder, cfg *
 	// Embedded UI
 	mux.Handle("/", http.FileServer(http.FS(ui.Assets)))
 
-	return mux
+	return loggingMiddleware(mux)
+}
+
+// loggingMiddleware logs method, path, status code, and duration for every request.
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rw, r)
+		duration := time.Since(start)
+
+		level := slog.LevelInfo
+		if rw.status >= 500 {
+			level = slog.LevelError
+		} else if rw.status >= 400 {
+			level = slog.LevelWarn
+		}
+
+		slog.Log(r.Context(), level, "http",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rw.status,
+			"duration_ms", duration.Milliseconds(),
+		)
+	})
+}
+
+// responseWriter wraps http.ResponseWriter to capture the status code.
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.status = code
+	rw.ResponseWriter.WriteHeader(code)
 }

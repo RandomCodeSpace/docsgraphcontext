@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"os"
+	"log/slog"
 
 	"github.com/RandomCodeSpace/docsgraphcontext/internal/llm"
 	"github.com/RandomCodeSpace/docsgraphcontext/internal/pipeline"
@@ -39,11 +39,12 @@ var indexCmd = &cobra.Command{
 				return fmt.Errorf("llm provider: %w", err)
 			}
 			pl := pipeline.New(st, prov, cfg)
-			fmt.Fprintln(os.Stderr, "Running Phase 3-4: community detection + summaries...")
+			slog.Info("running Phase 3-4: community detection + summaries")
 			if err := pl.Finalize(cmd.Context(), indexVerbose); err != nil {
+				slog.Error("finalization failed", "err", err)
 				return err
 			}
-			fmt.Fprintln(os.Stderr, "Finalization complete.")
+			slog.Info("finalization complete")
 			return nil
 		}
 
@@ -62,11 +63,13 @@ var indexCmd = &cobra.Command{
 		}
 
 		if indexURL != "" {
-			fmt.Fprintf(os.Stderr, "Crawling %s (workers=%d)...\n", indexURL, indexWorkers)
+			slog.Info("crawling documentation site", "url", indexURL, "workers", indexWorkers,
+				"max_pages", indexMaxPages, "max_depth", indexMaxDepth)
 			if err := pl.IndexURL(cmd.Context(), indexURL, opts); err != nil {
+				slog.Error("web indexing failed", "url", indexURL, "err", err)
 				return err
 			}
-			fmt.Fprintln(os.Stderr, "Web indexing complete.")
+			slog.Info("web indexing complete", "url", indexURL)
 			return nil
 		}
 
@@ -74,11 +77,12 @@ var indexCmd = &cobra.Command{
 			return fmt.Errorf("path or --url required (or use --finalize)")
 		}
 
-		fmt.Fprintf(os.Stderr, "Indexing %s (workers=%d)...\n", args[0], indexWorkers)
+		slog.Info("indexing path", "path", args[0], "workers", indexWorkers, "force", indexForce)
 		if err := pl.IndexPath(cmd.Context(), args[0], opts); err != nil {
+			slog.Error("indexing failed", "path", args[0], "err", err)
 			return err
 		}
-		fmt.Fprintln(os.Stderr, "Indexing complete.")
+		slog.Info("indexing complete", "path", args[0])
 		return nil
 	},
 }
