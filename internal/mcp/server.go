@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/amit/docsgraphcontext/internal/config"
@@ -14,12 +13,12 @@ import (
 
 // Server wraps the MCP server.
 type Server struct {
-	mcpServer *server.MCPServer
-	sseServer *server.SSEServer
-	store     *store.Store
-	provider  llm.Provider
-	embedder  *embedder.Embedder
-	cfg       *config.Config
+	mcpServer  *server.MCPServer
+	httpServer *server.StreamableHTTPServer
+	store      *store.Store
+	provider   llm.Provider
+	embedder   *embedder.Embedder
+	cfg        *config.Config
 }
 
 // New creates and registers all 12 MCP tools.
@@ -36,17 +35,13 @@ func New(st *store.Store, prov llm.Provider, emb *embedder.Embedder, cfg *config
 		server.WithToolCapabilities(true),
 	)
 	registerTools(s)
-
-	s.sseServer = server.NewSSEServer(s.mcpServer,
-		server.WithBaseURL(fmt.Sprintf("http://%s:%d", cfg.Server.Host, cfg.Server.Port)),
-	)
+	s.httpServer = server.NewStreamableHTTPServer(s.mcpServer)
 	return s
 }
 
-// Handler returns a single http.Handler that serves both SSE and message endpoints.
-// It uses the SSEServer which handles /sse and /message sub-paths.
+// Handler returns an http.Handler for the Streamable HTTP MCP transport.
 func (s *Server) Handler() http.Handler {
-	return s.sseServer
+	return s.httpServer
 }
 
 func toolError(err error) *mcpgo.CallToolResult {

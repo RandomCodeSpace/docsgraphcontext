@@ -18,8 +18,8 @@ func NewRouter(st *store.Store, prov llm.Provider, emb *embedder.Embedder, cfg *
 
 	mux := http.NewServeMux()
 
-	// MCP endpoints (SSEServer handles /sse and /message under /mcp)
-	mux.Handle("/mcp/", http.StripPrefix("/mcp", mcpServer.Handler()))
+	// MCP Streamable HTTP transport (POST /mcp, GET /mcp for SSE stream)
+	mux.Handle("/mcp", mcpServer.Handler())
 
 	// REST API
 	mux.HandleFunc("GET /api/stats", h.getStats)

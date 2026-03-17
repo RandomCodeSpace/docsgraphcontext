@@ -15,6 +15,7 @@ import (
 	"github.com/amit/docsgraphcontext/internal/chunker"
 	"github.com/amit/docsgraphcontext/internal/community"
 	"github.com/amit/docsgraphcontext/internal/config"
+	"github.com/amit/docsgraphcontext/internal/crawler"
 	"github.com/amit/docsgraphcontext/internal/embedder"
 	"github.com/amit/docsgraphcontext/internal/extractor"
 	"github.com/amit/docsgraphcontext/internal/llm"
@@ -54,10 +55,14 @@ func New(st *store.Store, prov llm.Provider, cfg *config.Config) *Pipeline {
 
 // IndexOptions controls indexing behavior.
 type IndexOptions struct {
-	Force    bool
-	Workers  int
-	Verbose  bool
-	Progress chan<- ProgressEvent
+	Force       bool
+	Workers     int
+	Verbose     bool
+	Progress    chan<- ProgressEvent
+	// Web crawl options (used by IndexURL)
+	MaxPages    int
+	MaxDepth    int
+	SkipSitemap bool
 }
 
 // IndexPath indexes a file or directory.
@@ -109,6 +114,61 @@ func (p *Pipeline) IndexPath(ctx context.Context, path string, opts IndexOptions
 	return nil
 }
 
+// IndexURL crawls a documentation website and indexes all discovered pages.
+func (p *Pipeline) IndexURL(ctx context.Context, rootURL string, opts IndexOptions) error {
+	workers := opts.Workers
+	if workers <= 0 {
+		workers = p.cfg.Indexing.Workers
+	}
+
+	fmt.Fprintf(os.Stderr, "Crawling %s...\n", rootURL)
+	pages, err := crawler.Crawl(ctx, rootURL, crawler.Options{
+		MaxPages:    opts.MaxPages,
+		MaxDepth:    opts.MaxDepth,
+		Concurrency: workers,
+		SkipSitemap: opts.SkipSitemap,
+	})
+	if err != nil {
+		return fmt.Errorf("crawl: %w", err)
+	}
+	if len(pages) == 0 {
+		return fmt.Errorf("no pages found at %s", rootURL)
+	}
+	fmt.Fprintf(os.Stderr, "Found %d pages — indexing...\n", len(pages))
+
+	bar := progressbar.NewOptions(len(pages),
+		progressbar.OptionSetDescription("Indexing pages"),
+		progressbar.OptionShowCount(),
+		progressbar.OptionSetWriter(os.Stderr),
+	)
+
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errs []string
+
+	for _, page := range pages {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(doc *loader.RawDocument) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			defer bar.Add(1)
+			if err := p.indexRawDoc(ctx, doc, opts); err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Sprintf("%s: %v", doc.Path, err))
+				mu.Unlock()
+			}
+		}(page)
+	}
+	wg.Wait()
+
+	if len(errs) > 0 {
+		return fmt.Errorf("indexing errors:\n%s", strings.Join(errs, "\n"))
+	}
+	return nil
+}
+
 // indexFile processes a single file through Phases 1-2.
 func (p *Pipeline) indexFile(ctx context.Context, path string, opts IndexOptions) error {
 	// Hash for dedup
@@ -127,14 +187,7 @@ func (p *Pipeline) indexFile(ctx context.Context, path string, opts IndexOptions
 	if existing != nil && existing.FileHash == hash && !opts.Force {
 		return nil // unchanged — skip
 	}
-
-	// Determine version number and canonical ID for this (possibly new) version.
-	nextVersion := 1
-	canonicalID := ""
 	if existing != nil {
-		nextVersion = existing.Version + 1
-		canonicalID = existing.CanonicalOrID()
-		// Mark the previous version as superseded (keep all its data in the graph).
 		if err := p.store.SupersedeDocument(ctx, existing.ID); err != nil {
 			return fmt.Errorf("supersede old version: %w", err)
 		}
@@ -151,6 +204,8 @@ func (p *Pipeline) indexFile(ctx context.Context, path string, opts IndexOptions
 		}
 		return fmt.Errorf("load: %w", err)
 	}
+
+	nextVersion, canonicalID := versionInfo(existing)
 
 	chunks := p.chunker.Split(doc.Content)
 	if len(chunks) == 0 {
@@ -638,6 +693,119 @@ func (p *Pipeline) Finalize(ctx context.Context, verbose bool) error {
 		}
 	}
 
+	return nil
+}
+
+// versionInfo returns the next version number and canonical ID.
+func versionInfo(existing *store.Document) (int, string) {
+	if existing == nil {
+		return 1, uuid.New().String()
+	}
+	canonicalID := existing.CanonicalID
+	if canonicalID == "" {
+		canonicalID = existing.ID
+	}
+	return existing.Version + 1, canonicalID
+}
+
+// indexRawDoc indexes a pre-loaded RawDocument (used by IndexURL for web pages).
+func (p *Pipeline) indexRawDoc(ctx context.Context, doc *loader.RawDocument, opts IndexOptions) error {
+	h := sha256.Sum256([]byte(doc.Content))
+	hash := hex.EncodeToString(h[:])
+
+	existing, err := p.store.GetDocumentByPath(ctx, doc.Path)
+	if err != nil {
+		return err
+	}
+	if existing != nil && existing.FileHash == hash && !opts.Force {
+		return nil
+	}
+	if existing != nil {
+		if err := p.store.SupersedeDocument(ctx, existing.ID); err != nil {
+			return fmt.Errorf("supersede old version: %w", err)
+		}
+	}
+
+	nextVersion, canonicalID := versionInfo(existing)
+	chunks := p.chunker.Split(doc.Content)
+	if len(chunks) == 0 {
+		return nil
+	}
+
+	docID := uuid.New().String()
+	if err := p.store.UpsertDocument(ctx, &store.Document{
+		ID:          docID,
+		Path:        doc.Path,
+		Title:       doc.Title,
+		DocType:     doc.DocType,
+		FileHash:    hash,
+		Version:     nextVersion,
+		CanonicalID: canonicalID,
+		IsLatest:    true,
+	}); err != nil {
+		return fmt.Errorf("upsert doc: %w", err)
+	}
+
+	texts := make([]string, len(chunks))
+	chunkIDs := make([]string, len(chunks))
+	storeChunks := make([]*store.Chunk, len(chunks))
+	for i, c := range chunks {
+		id := uuid.New().String()
+		chunkIDs[i] = id
+		texts[i] = c.Content
+		storeChunks[i] = &store.Chunk{
+			ID:         id,
+			DocID:      docID,
+			ChunkIndex: c.Index,
+			Content:    c.Content,
+			TokenCount: c.Tokens,
+		}
+	}
+
+	if err := p.store.BatchInsertChunks(ctx, storeChunks); err != nil {
+		return fmt.Errorf("batch insert chunks: %w", err)
+	}
+
+	vecs, err := p.embedder.EmbedTexts(ctx, texts)
+	if err != nil {
+		return fmt.Errorf("embed: %w", err)
+	}
+	if err := p.store.BatchUpsertEmbeddings(ctx, p.provider.ModelID(), chunkIDs, vecs); err != nil {
+		return fmt.Errorf("batch store embeddings: %w", err)
+	}
+
+	var (
+		graphErr     error
+		claimsErr    error
+		structureErr error
+		wg2          sync.WaitGroup
+	)
+	if p.cfg.Indexing.ExtractGraph {
+		wg2.Add(1)
+		go func() {
+			defer wg2.Done()
+			graphErr = p.extractGraph(ctx, docID, texts)
+		}()
+	}
+	if p.cfg.Indexing.ExtractClaims {
+		wg2.Add(1)
+		go func() {
+			defer wg2.Done()
+			claimsErr = p.extractClaims(ctx, docID, texts)
+		}()
+	}
+	wg2.Add(1)
+	go func() {
+		defer wg2.Done()
+		structureErr = p.structureDocument(ctx, docID, doc.Content)
+	}()
+	wg2.Wait()
+
+	for _, e := range []error{graphErr, claimsErr, structureErr} {
+		if e != nil && opts.Verbose {
+			fmt.Fprintf(os.Stderr, "  warning [%s]: %v\n", doc.Path, e)
+		}
+	}
 	return nil
 }
 

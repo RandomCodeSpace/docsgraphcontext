@@ -18,7 +18,7 @@ func registerTools(s *Server) {
 		mcpgo.WithNumber("top_k", mcpgo.Description("Number of results (default 5)")),
 		mcpgo.WithString("doc_type", mcpgo.Description("Filter by doc type: pdf|docx|txt|md")),
 	), server.ToolHandlerFunc(func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		args := req.Params.Arguments
+		args := req.GetArguments()
 		query := stringArg(args, "query", "")
 		topK := intArg(args, "top_k", 5)
 		if query == "" {
@@ -39,7 +39,7 @@ func registerTools(s *Server) {
 		mcpgo.WithNumber("top_k", mcpgo.Description("Number of chunk results (default 5)")),
 		mcpgo.WithNumber("graph_depth", mcpgo.Description("Graph walk depth (default 2)")),
 	), server.ToolHandlerFunc(func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		args := req.Params.Arguments
+		args := req.GetArguments()
 		query := stringArg(args, "query", "")
 		topK := intArg(args, "top_k", 5)
 		depth := intArg(args, "graph_depth", 2)
@@ -60,7 +60,7 @@ func registerTools(s *Server) {
 		mcpgo.WithString("query", mcpgo.Required(), mcpgo.Description("Search query")),
 		mcpgo.WithNumber("community_level", mcpgo.Description("Community hierarchy level (default 0)")),
 	), server.ToolHandlerFunc(func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		args := req.Params.Arguments
+		args := req.GetArguments()
 		query := stringArg(args, "query", "")
 		level := intArg(args, "community_level", 0)
 		if query == "" {
@@ -80,7 +80,7 @@ func registerTools(s *Server) {
 		mcpgo.WithString("entity_name", mcpgo.Required(), mcpgo.Description("Entity name")),
 		mcpgo.WithNumber("depth", mcpgo.Description("Relationship depth (default 1)")),
 	), server.ToolHandlerFunc(func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		args := req.Params.Arguments
+		args := req.GetArguments()
 		name := stringArg(args, "entity_name", "")
 		depth := intArg(args, "depth", 1)
 		if name == "" {
@@ -109,7 +109,7 @@ func registerTools(s *Server) {
 		mcpgo.WithString("to", mcpgo.Description("Target entity ID")),
 		mcpgo.WithString("predicate", mcpgo.Description("Relationship predicate filter")),
 	), server.ToolHandlerFunc(func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		args := req.Params.Arguments
+		args := req.GetArguments()
 		from := stringArg(args, "from", "")
 		to := stringArg(args, "to", "")
 		pred := stringArg(args, "predicate", "")
@@ -128,7 +128,7 @@ func registerTools(s *Server) {
 		mcpgo.WithNumber("depth", mcpgo.Description("BFS depth (default 2)")),
 		mcpgo.WithNumber("max_nodes", mcpgo.Description("Max nodes to return (default 50)")),
 	), server.ToolHandlerFunc(func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		args := req.Params.Arguments
+		args := req.GetArguments()
 		name := stringArg(args, "entity_name", "")
 		depth := intArg(args, "depth", 2)
 		maxNodes := intArg(args, "max_nodes", 50)
@@ -185,7 +185,7 @@ func registerTools(s *Server) {
 		mcpgo.WithDescription("Get LLM-generated structured summary of a document"),
 		mcpgo.WithString("doc_id", mcpgo.Description("Document ID")),
 	), server.ToolHandlerFunc(func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		args := req.Params.Arguments
+		args := req.GetArguments()
 		docID := stringArg(args, "doc_id", "")
 		if docID == "" {
 			return toolError(fmt.Errorf("doc_id required")), nil
@@ -210,7 +210,7 @@ func registerTools(s *Server) {
 		mcpgo.WithNumber("limit", mcpgo.Description("Max results (default 20)")),
 		mcpgo.WithNumber("offset", mcpgo.Description("Pagination offset")),
 	), server.ToolHandlerFunc(func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		args := req.Params.Arguments
+		args := req.GetArguments()
 		typ := stringArg(args, "type", "")
 		limit := intArg(args, "limit", 20)
 		offset := intArg(args, "offset", 0)
@@ -229,7 +229,7 @@ func registerTools(s *Server) {
 		mcpgo.WithNumber("limit", mcpgo.Description("Max results (default 20)")),
 		mcpgo.WithNumber("offset", mcpgo.Description("Pagination offset")),
 	), server.ToolHandlerFunc(func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		args := req.Params.Arguments
+		args := req.GetArguments()
 		docType := stringArg(args, "doc_type", "")
 		limit := intArg(args, "limit", 20)
 		offset := intArg(args, "offset", 0)
@@ -246,7 +246,7 @@ func registerTools(s *Server) {
 		mcpgo.WithDescription("Get community summary and member entities"),
 		mcpgo.WithString("community_id", mcpgo.Required(), mcpgo.Description("Community ID")),
 	), server.ToolHandlerFunc(func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		args := req.Params.Arguments
+		args := req.GetArguments()
 		commID := stringArg(args, "community_id", "")
 		if commID == "" {
 			return toolError(fmt.Errorf("community_id required")), nil
@@ -272,7 +272,7 @@ func registerTools(s *Server) {
 		mcpgo.WithDescription("Retrieve a specific chunk by ID"),
 		mcpgo.WithString("chunk_id", mcpgo.Required(), mcpgo.Description("Chunk ID")),
 	), server.ToolHandlerFunc(func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-		args := req.Params.Arguments
+		args := req.GetArguments()
 		chunkID := stringArg(args, "chunk_id", "")
 		if chunkID == "" {
 			return toolError(fmt.Errorf("chunk_id required")), nil
