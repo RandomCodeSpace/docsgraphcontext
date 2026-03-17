@@ -5,6 +5,8 @@
 [![OpenSSF Score](https://api.scorecard.dev/projects/github.com/RandomCodeSpace/docscontext/badge)](https://scorecard.dev/viewer/?uri=github.com/RandomCodeSpace/docscontext)
 [![Release](https://img.shields.io/github/v/release/RandomCodeSpace/docscontext)](https://github.com/RandomCodeSpace/docscontext/releases)
 [![Beta](https://img.shields.io/github/v/release/RandomCodeSpace/docscontext?include_prereleases&label=beta)](https://github.com/RandomCodeSpace/docscontext/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/RandomCodeSpace/docscontext)](https://github.com/RandomCodeSpace/docscontext/blob/main/go.mod)
+[![Frontend Version](https://img.shields.io/badge/frontend-none-lightgrey)](https://github.com/RandomCodeSpace/docscontext)
 
 A pure Go ([CGO_ENABLED=0](https://pkg.go.dev/cmd/cgo)) GraphRAG tool inspired by [Microsoft GraphRAG](https://github.com/microsoft/graphrag).
 Ingests unstructured documents, builds a hierarchical knowledge graph with community detection, and exposes an **MCP server + embedded Web UI** on a single port.
