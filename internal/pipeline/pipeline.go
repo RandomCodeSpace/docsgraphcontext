@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -309,6 +310,17 @@ func (p *Pipeline) indexFile(ctx context.Context, path string, opts IndexOptions
 	return nil
 }
 
+// normalizeEntityName returns a canonical form for entity name matching.
+// Lowercases, trims whitespace, and collapses multiple spaces.
+var spaceCollapser = regexp.MustCompile(`\s+`)
+
+func normalizeEntityName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.ToLower(name)
+	name = spaceCollapser.ReplaceAllString(name, " ")
+	return name
+}
+
 // extractGraph runs entity/relationship extraction over chunk text batches.
 func (p *Pipeline) extractGraph(ctx context.Context, docID string, texts []string) error {
 	const batchChunks = 3
@@ -317,6 +329,7 @@ func (p *Pipeline) extractGraph(ctx context.Context, docID string, texts []strin
 		err    error
 	}
 
+	maxGleanings := p.cfg.Indexing.MaxGleanings
 	numBatches := (len(texts) + batchChunks - 1) / batchChunks
 	results := make([]batchResult, numBatches)
 
@@ -333,7 +346,8 @@ func (p *Pipeline) extractGraph(ctx context.Context, docID string, texts []strin
 			if end > len(texts) {
 				end = len(texts)
 			}
-			res, err := extractor.ExtractEntities(ctx, p.provider, texts[start:end])
+			res, err := extractor.ExtractEntities(ctx, p.provider, texts[start:end],
+				extractor.WithMaxGleanings(maxGleanings))
 			if err != nil {
 				slog.Debug("⚠️ entity extraction batch failed", "doc_id", docID, "batch", idx, "err", err)
 			}
@@ -342,29 +356,44 @@ func (p *Pipeline) extractGraph(ctx context.Context, docID string, texts []strin
 	}
 	wg.Wait()
 
-	// Collect all extracted names for a single bulk DB lookup
-	nameSet := map[string]struct{}{}
+	// Collect all extracted names for a single bulk DB lookup.
+	// Use normalized names for deduplication but preserve the original
+	// (first-seen) name as the canonical display name.
+	type nameEntry struct {
+		normalized  string
+		displayName string
+	}
+	normalizedSet := map[string]nameEntry{} // normalized → entry
 	for _, br := range results {
 		if br.err != nil || br.result == nil {
 			continue
 		}
 		for _, e := range br.result.Entities {
-			if e.Name != "" {
-				nameSet[e.Name] = struct{}{}
+			if e.Name == "" {
+				continue
+			}
+			norm := normalizeEntityName(e.Name)
+			if _, exists := normalizedSet[norm]; !exists {
+				normalizedSet[norm] = nameEntry{normalized: norm, displayName: e.Name}
 			}
 		}
 	}
-	names := make([]string, 0, len(nameSet))
-	for n := range nameSet {
-		names = append(names, n)
+	names := make([]string, 0, len(normalizedSet))
+	for _, entry := range normalizedSet {
+		names = append(names, entry.displayName)
 	}
 
 	existingEntities, err := p.store.GetEntitiesByNames(ctx, names)
 	if err != nil {
 		return err
 	}
+	// Also build a normalized lookup for existing entities
+	existingByNorm := make(map[string]*store.Entity, len(existingEntities))
+	for name, ent := range existingEntities {
+		existingByNorm[normalizeEntityName(name)] = ent
+	}
 
-	entityIDMap := make(map[string]string, len(names))
+	entityIDMap := make(map[string]string, len(normalizedSet)) // normalized name → ID
 	var toUpsert []*store.Entity
 
 	for _, br := range results {
@@ -375,21 +404,23 @@ func (p *Pipeline) extractGraph(ctx context.Context, docID string, texts []strin
 			if e.Name == "" {
 				continue
 			}
-			if _, seen := entityIDMap[e.Name]; seen {
+			norm := normalizeEntityName(e.Name)
+			if _, seen := entityIDMap[norm]; seen {
 				continue
 			}
-			if existing, ok := existingEntities[e.Name]; ok {
-				entityIDMap[e.Name] = existing.ID
+			if existing, ok := existingByNorm[norm]; ok {
+				entityIDMap[norm] = existing.ID
 				if len(e.Description) > len(existing.Description) {
 					existing.Description = e.Description
 					toUpsert = append(toUpsert, existing)
 				}
 			} else {
 				eid := uuid.New().String()
-				entityIDMap[e.Name] = eid
+				entityIDMap[norm] = eid
+				displayName := normalizedSet[norm].displayName
 				toUpsert = append(toUpsert, &store.Entity{
 					ID:          eid,
-					Name:        e.Name,
+					Name:        displayName,
 					Type:        e.Type,
 					Description: e.Description,
 				})
@@ -401,17 +432,28 @@ func (p *Pipeline) extractGraph(ctx context.Context, docID string, texts []strin
 		return fmt.Errorf("batch upsert entities: %w", err)
 	}
 
+	// Collect relationships with deduplication by (sourceID, targetID, predicate).
+	type relKey struct{ src, tgt, pred string }
+	seenRels := map[relKey]bool{}
 	var rels []*store.Relationship
 	for _, br := range results {
 		if br.err != nil || br.result == nil {
 			continue
 		}
 		for _, r := range br.result.Relationships {
-			srcID, ok1 := entityIDMap[r.Source]
-			tgtID, ok2 := entityIDMap[r.Target]
+			srcNorm := normalizeEntityName(r.Source)
+			tgtNorm := normalizeEntityName(r.Target)
+			srcID, ok1 := entityIDMap[srcNorm]
+			tgtID, ok2 := entityIDMap[tgtNorm]
 			if !ok1 || !ok2 {
 				continue
 			}
+			predNorm := strings.ToLower(strings.TrimSpace(r.Predicate))
+			key := relKey{srcID, tgtID, predNorm}
+			if seenRels[key] {
+				continue
+			}
+			seenRels[key] = true
 			rels = append(rels, &store.Relationship{
 				ID:          uuid.New().String(),
 				SourceID:    srcID,

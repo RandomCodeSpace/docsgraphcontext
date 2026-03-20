@@ -19,10 +19,9 @@ type Config struct {
 }
 
 type LLMConfig struct {
-	Provider    string             `mapstructure:"provider"`
-	Azure       AzureConfig        `mapstructure:"azure"`
-	Ollama      OllamaConfig       `mapstructure:"ollama"`
-	HuggingFace HuggingFaceConfig  `mapstructure:"huggingface"`
+	Provider string       `mapstructure:"provider"`
+	Azure    AzureConfig  `mapstructure:"azure"`
+	Ollama   OllamaConfig `mapstructure:"ollama"`
 }
 
 type AzureConfig struct {
@@ -39,20 +38,14 @@ type OllamaConfig struct {
 	EmbedModel string `mapstructure:"embed_model"`
 }
 
-type HuggingFaceConfig struct {
-	BaseURL    string `mapstructure:"base_url"`
-	APIKey     string `mapstructure:"api_key"`
-	ChatModel  string `mapstructure:"chat_model"`
-	EmbedModel string `mapstructure:"embed_model"`
-}
-
 type IndexingConfig struct {
-	ChunkSize    int  `mapstructure:"chunk_size"`
-	ChunkOverlap int  `mapstructure:"chunk_overlap"`
-	BatchSize    int  `mapstructure:"batch_size"`
-	Workers      int  `mapstructure:"workers"`
-	ExtractGraph bool `mapstructure:"extract_graph"`
+	ChunkSize     int  `mapstructure:"chunk_size"`
+	ChunkOverlap  int  `mapstructure:"chunk_overlap"`
+	BatchSize     int  `mapstructure:"batch_size"`
+	Workers       int  `mapstructure:"workers"`
+	ExtractGraph  bool `mapstructure:"extract_graph"`
 	ExtractClaims bool `mapstructure:"extract_claims"`
+	MaxGleanings  int  `mapstructure:"max_gleanings"`
 }
 
 type CommunityConfig struct {
@@ -81,15 +74,13 @@ func Load(cfgFile string) (*Config, error) {
 	v.SetDefault("llm.azure.api_version", "2024-02-01")
 	v.SetDefault("llm.azure.chat_model", "gpt-4o")
 	v.SetDefault("llm.azure.embed_model", "text-embedding-3-small")
-	v.SetDefault("llm.huggingface.base_url", "http://localhost:8000")
-	v.SetDefault("llm.huggingface.chat_model", "mistralai/Mistral-7B-Instruct-v0.3")
-	v.SetDefault("llm.huggingface.embed_model", "sentence-transformers/all-MiniLM-L6-v2")
 	v.SetDefault("indexing.chunk_size", 512)
 	v.SetDefault("indexing.chunk_overlap", 50)
 	v.SetDefault("indexing.batch_size", 20)
 	v.SetDefault("indexing.workers", 4)
 	v.SetDefault("indexing.extract_graph", true)
 	v.SetDefault("indexing.extract_claims", true)
+	v.SetDefault("indexing.max_gleanings", 1)
 	v.SetDefault("community.min_community_size", 3)
 	v.SetDefault("community.max_levels", 3)
 	v.SetDefault("server.host", "127.0.0.1")

@@ -6,7 +6,7 @@ import (
 
 // Graph represents an undirected weighted graph for community detection.
 type Graph struct {
-	Nodes []string
+	Nodes     []string
 	nodeIndex map[string]int
 	Edges     []Edge
 	adjMatrix [][]float64 // dense for simplicity
@@ -61,6 +61,16 @@ func (g *Graph) NodeIndex(id string) (int, bool) {
 
 // Louvain runs the Louvain community detection algorithm.
 // Returns a map from node index → community ID (integer).
+//
+// Uses the standard modularity gain formula:
+//
+//	ΔQ = [k_i_in / (2m)] - [sigma_tot * k_i / (2m²)]
+//
+// where:
+//   - k_i_in  = sum of edge weights from node i to nodes in community C
+//   - sigma_tot = sum of all edge weights incident to nodes in community C
+//   - k_i    = weighted degree of node i
+//   - m      = total edge weight of the graph
 func Louvain(g *Graph, maxIter int) []int {
 	n := len(g.Nodes)
 	if n == 0 {
@@ -77,16 +87,32 @@ func Louvain(g *Graph, maxIter int) []int {
 		return comm
 	}
 
+	m := g.totalWeight // total edge weight
+	m2 := 2.0 * m      // 2m, used frequently
+
+	// Precompute node degrees
+	degree := make([]float64, n)
+	for i := 0; i < n; i++ {
+		degree[i] = g.nodeDegree(i)
+	}
+
+	// Community total degree (sigma_tot): sum of degrees of all nodes in community
+	sigmaTot := make(map[int]float64, n)
+	for i := 0; i < n; i++ {
+		sigmaTot[comm[i]] += degree[i]
+	}
+
 	improved := true
 	for iter := 0; iter < maxIter && improved; iter++ {
 		improved = false
-		// Random order
 		order := rand.Perm(n)
 		for _, i := range order {
 			bestComm := comm[i]
 			bestGain := 0.0
+			ki := degree[i]
+			oldComm := comm[i]
 
-			// Neighbor communities
+			// Compute weights from node i to each neighboring community
 			neighborComms := map[int]float64{}
 			for j := 0; j < n; j++ {
 				if g.adjMatrix[i][j] > 0 {
@@ -94,27 +120,30 @@ func Louvain(g *Graph, maxIter int) []int {
 				}
 			}
 
-			// Current community weight (excluding i)
-			ki := g.nodeDegree(i)
+			// Remove node i from its current community for gain calculation
+			sigmaTot[oldComm] -= ki
 
-			// Remove i from current community
-			oldComm := comm[i]
-			comm[i] = -1
+			// Gain of removing node i from its current community
+			kiOld := neighborComms[oldComm] // edges from i to old community (after removal)
+			removeLoss := kiOld/m2 - (sigmaTot[oldComm]*ki)/(m2*m2)
 
-			for c, w := range neighborComms {
-				// Modularity gain (simplified)
-				sigmaC := g.communityDegree(comm, c)
-				gain := w - (ki*sigmaC)/(2*g.totalWeight)
+			for c, kiIn := range neighborComms {
+				// Gain of adding node i to community c
+				addGain := kiIn/m2 - (sigmaTot[c]*ki)/(m2*m2)
+				gain := addGain - removeLoss
 				if gain > bestGain {
 					bestGain = gain
 					bestComm = c
 				}
 			}
 
+			// Move node i to best community
+			comm[i] = bestComm
+			sigmaTot[bestComm] += ki
+
 			if bestComm != oldComm {
 				improved = true
 			}
-			comm[i] = bestComm
 		}
 	}
 
@@ -136,16 +165,6 @@ func (g *Graph) nodeDegree(i int) float64 {
 	var d float64
 	for j := range g.adjMatrix[i] {
 		d += g.adjMatrix[i][j]
-	}
-	return d
-}
-
-func (g *Graph) communityDegree(comm []int, c int) float64 {
-	var d float64
-	for i, ci := range comm {
-		if ci == c {
-			d += g.nodeDegree(i)
-		}
 	}
 	return d
 }
