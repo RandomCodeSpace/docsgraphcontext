@@ -1,7 +1,7 @@
 data_dir: ~/.DocsContext/data   # stores DocsContext.db
 
 llm:
-  provider: ollama             # azure | ollama | huggingface
+  provider: ollama             # azure | ollama
 
   azure:
     endpoint: https://myresource.openai.azure.com
@@ -15,12 +15,6 @@ llm:
     chat_model: llama3.2
     embed_model: nomic-embed-text
 
-  huggingface:
-    base_url: http://localhost:8000    # TGI local endpoint
-    api_key: ${HF_API_KEY}
-    chat_model: mistralai/Mistral-7B-Instruct-v0.3
-    embed_model: sentence-transformers/all-MiniLM-L6-v2
-
 indexing:
   chunk_size: 512
   chunk_overlap: 50
@@ -28,6 +22,7 @@ indexing:
   workers: 4
   extract_graph: true
   extract_claims: true
+  max_gleanings: 1             # gleaning passes for entity extraction (0=single pass)
 
 community:
   min_community_size: 3
