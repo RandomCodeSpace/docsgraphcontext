@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -45,7 +46,11 @@ func (s *Store) migrate() error {
 		`ALTER TABLE documents ADD COLUMN is_latest    INTEGER NOT NULL DEFAULT 1`,
 	}
 	for _, m := range migrations {
-		s.db.Exec(m) // ignore "duplicate column" errors
+		if _, err := s.db.Exec(m); err != nil {
+			if !strings.Contains(err.Error(), "duplicate column") {
+				return fmt.Errorf("migration failed: %w", err)
+			}
+		}
 	}
 	return nil
 }

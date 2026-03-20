@@ -42,7 +42,7 @@ func NewRouter(st *store.Store, prov llm.Provider, emb *embedder.Embedder, cfg *
 	// Embedded UI
 	mux.Handle("/", spaHandler(ui.Assets))
 
-	return loggingMiddleware(mux)
+	return loggingMiddleware(recoveryMiddleware(mux))
 }
 
 func spaHandler(assets fs.FS) http.Handler {
@@ -73,6 +73,19 @@ func spaHandler(assets fs.FS) http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(content)
+	})
+}
+
+// recoveryMiddleware catches panics in handlers and returns a 500 response.
+func recoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				slog.Error("❌ panic recovered", "path", r.URL.Path, "panic", rec)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
 	})
 }
 

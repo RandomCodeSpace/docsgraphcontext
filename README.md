@@ -16,7 +16,7 @@ Ingests unstructured documents, builds a hierarchical knowledge graph with commu
 - **GraphRAG pipeline** — 5-phase: load → chunk → embed → graph extraction → community detection
 - **Knowledge graph** — entity/relationship/claim extraction via LLM (JSON mode)
 - **Louvain community detection** — pure Go, hierarchical, no external dependencies
-- **Three LLM providers** — Azure OpenAI, Ollama (local), HuggingFace TGI
+- **Two LLM providers** — Azure OpenAI, Ollama (local), via langchaingo
 - **12 MCP tools** — local search, global search, graph walk, community reports, and more
 - **Embedded Web UI** — vis-network graph explorer, semantic search, document browser
 - **Single binary** — zero CGO, cross-compiles to Linux / macOS / Windows
@@ -66,7 +66,7 @@ Copy `config.example.yaml` to `~/.docscontext/config.yaml` and edit:
 data_dir: ~/.docscontext/data
 
 llm:
-  provider: ollama          # azure | ollama | huggingface
+  provider: ollama          # azure | ollama
 
   ollama:
     base_url: http://localhost:11434
@@ -175,7 +175,7 @@ All data lives in a single SQLite file at `$DATA_DIR/docscontext.db`.
 
 | Format | Extensions | Notes |
 |---|---|---|
-| PDF | `.pdf` | Text extraction via pdfcpu; scanned/image-only PDFs yield no text |
+| PDF | `.pdf` | Text extraction via langchaingo (ledongthuc/pdf); scanned/image-only PDFs yield no text |
 | Word | `.docx` | Open XML format (Office 2007+); legacy `.doc` not supported |
 | Markdown | `.md`, `.markdown` | Heading `# Title` used as document title |
 | Plain text | `.txt`, `.text` | UTF-8 encoding expected |

@@ -49,193 +49,22 @@ The following improvements are already committed to the branch `claude/fix-codec
    - **Relationship deduplication**: By (source, target, predicate) in pipeline
    - **Fixed Louvain modularity formula**: Correct ΔQ calculation in `internal/community/louvain.go`
 
-## Remaining Task: langchaingo Integration
+## Completed Integrations
 
-Replace the custom HTTP-based LLM provider implementations with [langchaingo](https://github.com/tmc/langchaingo) (v0.1.14+).
+**langchaingo** is used for:
+- **LLM providers** — `internal/llm/provider.go` wraps langchaingo for Azure OpenAI and Ollama (replaced custom HTTP clients)
+- **Text splitting** — `internal/chunker/chunker.go` uses `textsplitter.RecursiveCharacter`
+- **PDF loading** — `internal/loader/pdf.go` uses `documentloaders.NewPDF()` (replaced pdfcpu Tj/TJ parser)
 
-### Why
+## Recent Bug Fixes
 
-The current `internal/llm/azure.go` and `internal/llm/ollama.go` are ~250 lines of manual HTTP client code. langchaingo provides battle-tested implementations with proper error handling and retries.
-
-### Step 1: Add langchaingo dependency
-
-```bash
-go get github.com/tmc/langchaingo@latest
-```
-
-### Step 2: Rewrite `internal/llm/provider.go`
-
-Keep the existing `Provider` interface unchanged. Replace the implementations with a single `lcProvider` struct that wraps langchaingo:
-
-```go
-package llm
-
-import (
-    "context"
-    "fmt"
-
-    "github.com/RandomCodeSpace/docscontext/internal/config"
-    "github.com/tmc/langchaingo/embeddings"
-    "github.com/tmc/langchaingo/llms"
-    "github.com/tmc/langchaingo/llms/ollama"
-    "github.com/tmc/langchaingo/llms/openai"
-)
-
-// lcProvider adapts langchaingo to our Provider interface.
-type lcProvider struct {
-    llm     llms.Model
-    emb     embeddings.Embedder
-    name    string
-    modelID string
-}
-
-func (p *lcProvider) Name() string    { return p.name }
-func (p *lcProvider) ModelID() string { return p.modelID }
-
-func (p *lcProvider) Complete(ctx context.Context, prompt string, opts ...Option) (string, error) {
-    o := applyOptions(opts)
-    callOpts := []llms.CallOption{
-        llms.WithMaxTokens(o.maxTokens),
-        llms.WithTemperature(o.temperature),
-    }
-    if o.jsonMode {
-        callOpts = append(callOpts, llms.WithJSONMode())
-    }
-    return llms.GenerateFromSinglePrompt(ctx, p.llm, prompt, callOpts...)
-}
-
-func (p *lcProvider) Embed(ctx context.Context, text string) ([]float32, error) {
-    return p.emb.EmbedQuery(ctx, text)
-}
-
-func (p *lcProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
-    return p.emb.EmbedDocuments(ctx, texts)
-}
-```
-
-#### Ollama factory:
-
-```go
-func newOllamaProvider(cfg *config.LLMConfig) (Provider, error) {
-    chatLLM, err := ollama.New(
-        ollama.WithServerURL(cfg.Ollama.BaseURL),
-        ollama.WithModel(cfg.Ollama.ChatModel),
-    )
-    if err != nil {
-        return nil, fmt.Errorf("ollama chat LLM: %w", err)
-    }
-    embedLLM, err := ollama.New(
-        ollama.WithServerURL(cfg.Ollama.BaseURL),
-        ollama.WithModel(cfg.Ollama.EmbedModel),
-    )
-    if err != nil {
-        return nil, fmt.Errorf("ollama embed LLM: %w", err)
-    }
-    emb, err := embeddings.NewEmbedder(embedLLM)
-    if err != nil {
-        return nil, fmt.Errorf("ollama embedder: %w", err)
-    }
-    return &lcProvider{llm: chatLLM, emb: emb, name: "ollama", modelID: cfg.Ollama.EmbedModel}, nil
-}
-```
-
-#### Azure factory:
-
-```go
-func newAzureProvider(cfg *config.LLMConfig) (Provider, error) {
-    chatLLM, err := openai.New(
-        openai.WithBaseURL(cfg.Azure.Endpoint),
-        openai.WithToken(cfg.Azure.APIKey),
-        openai.WithAPIVersion(cfg.Azure.APIVersion),
-        openai.WithAPIType(openai.APITypeAzure),
-        openai.WithModel(cfg.Azure.ChatModel),
-        openai.WithEmbeddingModel(cfg.Azure.EmbedModel),
-    )
-    if err != nil {
-        return nil, fmt.Errorf("azure openai LLM: %w", err)
-    }
-    emb, err := embeddings.NewEmbedder(chatLLM)
-    if err != nil {
-        return nil, fmt.Errorf("azure openai embedder: %w", err)
-    }
-    return &lcProvider{llm: chatLLM, emb: emb, name: "azure", modelID: cfg.Azure.EmbedModel}, nil
-}
-```
-
-### Step 3: Delete old implementations
-
-```bash
-rm internal/llm/azure.go internal/llm/ollama.go
-```
-
-### Step 4: Replace `internal/chunker/chunker.go` with langchaingo textsplitter
-
-```go
-package chunker
-
-import (
-    "unicode/utf8"
-    "github.com/tmc/langchaingo/textsplitter"
-)
-
-type Chunk struct {
-    Index   int
-    Content string
-    Tokens  int
-}
-
-type Chunker struct {
-    splitter textsplitter.RecursiveCharacter
-}
-
-func New(chunkSize, chunkOverlap int) *Chunker {
-    return &Chunker{
-        splitter: textsplitter.NewRecursiveCharacter(
-            textsplitter.WithChunkSize(chunkSize),
-            textsplitter.WithChunkOverlap(chunkOverlap),
-            textsplitter.WithSeparators([]string{"\n\n", "\n", ". ", " ", ""}),
-        ),
-    }
-}
-
-func (c *Chunker) Split(text string) []Chunk {
-    parts, err := c.splitter.SplitText(text)
-    if err != nil {
-        return []Chunk{{Index: 0, Content: text, Tokens: estimateTokens(text)}}
-    }
-    chunks := make([]Chunk, len(parts))
-    for i, p := range parts {
-        chunks[i] = Chunk{Index: i, Content: p, Tokens: estimateTokens(p)}
-    }
-    return chunks
-}
-
-func estimateTokens(text string) int {
-    return utf8.RuneCountInString(text) / 4
-}
-```
-
-### Step 5: No changes needed for embedder
-
-`internal/embedder/embedder.go` delegates to `Provider.EmbedBatch()` — it works as-is since the `Provider` interface is unchanged.
-
-### Step 6: Build and verify
-
-```bash
-go mod tidy
-go build ./...
-go test ./...
-```
-
-### Important langchaingo API notes
-
-- `llms.GenerateFromSinglePrompt()` — sends a single prompt and returns the text response
-- `embeddings.NewEmbedder(client)` — wraps any LLM with `CreateEmbedding()` into an `Embedder`
-- `embeddings.Embedder.EmbedDocuments()` returns `[][]float32` (not float64)
-- `embeddings.Embedder.EmbedQuery()` returns `[]float32`
-- Ollama's `LLM` and OpenAI's `LLM` both implement `CreateEmbedding(ctx, []string) ([][]float32, error)`
-- OpenAI package supports Azure via `openai.WithAPIType(openai.APITypeAzure)`
-- OpenAI package supports separate embedding model via `openai.WithEmbeddingModel()`
+- Background goroutine context leak fix in API upload handler
+- Job progress tracking uses proper map with atomic counter
+- Temp directory cleanup on early upload errors
+- Entity/relationship dedup improvements in extractor (case-insensitive, relationship dedup)
+- Vector count validation in embedder and pipeline
+- Panic recovery middleware added to API
+- Schema migration error handling improved in store
 
 ## Code Style
 
@@ -243,3 +72,66 @@ go test ./...
 - Error wrapping: `fmt.Errorf("context: %w", err)`
 - Concurrency: use semaphore channels (`make(chan struct{}, N)`) for limiting parallelism
 - Config: Viper with `mapstructure` tags, env prefix `DocsContext`
+
+# context-mode — MANDATORY routing rules
+
+You have context-mode MCP tools available. These rules are NOT optional — they protect your context window from flooding. A single unrouted command can dump 56 KB into context and waste the entire session.
+
+## BLOCKED commands — do NOT attempt these
+
+### curl / wget — BLOCKED
+Any Bash command containing `curl` or `wget` is intercepted and replaced with an error message. Do NOT retry.
+Instead use:
+- `ctx_fetch_and_index(url, source)` to fetch and index web pages
+- `ctx_execute(language: "javascript", code: "const r = await fetch(...)")` to run HTTP calls in sandbox
+
+### Inline HTTP — BLOCKED
+Any Bash command containing `fetch('http`, `requests.get(`, `requests.post(`, `http.get(`, or `http.request(` is intercepted and replaced with an error message. Do NOT retry with Bash.
+Instead use:
+- `ctx_execute(language, code)` to run HTTP calls in sandbox — only stdout enters context
+
+### WebFetch — BLOCKED
+WebFetch calls are denied entirely. The URL is extracted and you are told to use `ctx_fetch_and_index` instead.
+Instead use:
+- `ctx_fetch_and_index(url, source)` then `ctx_search(queries)` to query the indexed content
+
+## REDIRECTED tools — use sandbox equivalents
+
+### Bash (>20 lines output)
+Bash is ONLY for: `git`, `mkdir`, `rm`, `mv`, `cd`, `ls`, `npm install`, `pip install`, and other short-output commands.
+For everything else, use:
+- `ctx_batch_execute(commands, queries)` — run multiple commands + search in ONE call
+- `ctx_execute(language: "shell", code: "...")` — run in sandbox, only stdout enters context
+
+### Read (for analysis)
+If you are reading a file to **Edit** it → Read is correct (Edit needs content in context).
+If you are reading to **analyze, explore, or summarize** → use `ctx_execute_file(path, language, code)` instead. Only your printed summary enters context. The raw file content stays in the sandbox.
+
+### Grep (large results)
+Grep results can flood context. Use `ctx_execute(language: "shell", code: "grep ...")` to run searches in sandbox. Only your printed summary enters context.
+
+## Tool selection hierarchy
+
+1. **GATHER**: `ctx_batch_execute(commands, queries)` — Primary tool. Runs all commands, auto-indexes output, returns search results. ONE call replaces 30+ individual calls.
+2. **FOLLOW-UP**: `ctx_search(queries: ["q1", "q2", ...])` — Query indexed content. Pass ALL questions as array in ONE call.
+3. **PROCESSING**: `ctx_execute(language, code)` | `ctx_execute_file(path, language, code)` — Sandbox execution. Only stdout enters context.
+4. **WEB**: `ctx_fetch_and_index(url, source)` then `ctx_search(queries)` — Fetch, chunk, index, query. Raw HTML never enters context.
+5. **INDEX**: `ctx_index(content, source)` — Store content in FTS5 knowledge base for later search.
+
+## Subagent routing
+
+When spawning subagents (Agent/Task tool), the routing block is automatically injected into their prompt. Bash-type subagents are upgraded to general-purpose so they have access to MCP tools. You do NOT need to manually instruct subagents about context-mode.
+
+## Output constraints
+
+- Keep responses under 500 words.
+- Write artifacts (code, configs, PRDs) to FILES — never return them as inline text. Return only: file path + 1-line description.
+- When indexing content, use descriptive source labels so others can `ctx_search(source: "label")` later.
+
+## ctx commands
+
+| Command | Action |
+|---------|--------|
+| `ctx stats` | Call the `ctx_stats` MCP tool and display the full output verbatim |
+| `ctx doctor` | Call the `ctx_doctor` MCP tool, run the returned shell command, display as checklist |
+| `ctx upgrade` | Call the `ctx_upgrade` MCP tool, run the returned shell command, display as checklist |

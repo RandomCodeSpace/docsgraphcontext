@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"github.com/RandomCodeSpace/docscontext/internal/config"
 	"github.com/RandomCodeSpace/docscontext/internal/embedder"
@@ -27,7 +29,8 @@ type handlers struct {
 
 	// Upload progress tracking
 	uploadMu    sync.Mutex
-	jobProgress []string
+	jobProgress map[string]string
+	jobCounter  atomic.Int64
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -271,6 +274,13 @@ func (h *handlers) upload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, 500, err.Error(), err)
 		return
 	}
+	// Clean up tmpDir if we return early before the background goroutine takes ownership.
+	tmpDirOwned := false
+	defer func() {
+		if !tmpDirOwned {
+			os.RemoveAll(tmpDir)
+		}
+	}()
 
 	var paths []string
 	for _, fh := range files {
@@ -296,12 +306,15 @@ func (h *handlers) upload(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, dst)
 	}
 
-	jobID := fmt.Sprintf("job-%d", len(h.jobProgress))
+	jobID := fmt.Sprintf("job-%d", h.jobCounter.Add(1))
 	slog.Info("📦 upload job queued", "job_id", jobID, "files", len(paths))
 
-	h.uploadMu.Lock()
-	h.jobProgress = append(h.jobProgress, fmt.Sprintf("queued: %d files", len(paths)))
-	h.uploadMu.Unlock()
+	h.setProgress(jobID, fmt.Sprintf("queued: %d files", len(paths)))
+
+	// Use a detached context so the background goroutine is not cancelled
+	// when the HTTP response is sent.
+	bgCtx := context.Background()
+	tmpDirOwned = true
 
 	go func() {
 		defer os.RemoveAll(tmpDir)
@@ -309,7 +322,7 @@ func (h *handlers) upload(w http.ResponseWriter, r *http.Request) {
 		for _, p := range paths {
 			slog.Info("📦 upload indexing file", "job_id", jobID, "file", filepath.Base(p))
 			h.setProgress(jobID, fmt.Sprintf("indexing: %s", filepath.Base(p)))
-			if err := pl.IndexPath(r.Context(), p, pipeline.IndexOptions{}); err != nil {
+			if err := pl.IndexPath(bgCtx, p, pipeline.IndexOptions{}); err != nil {
 				slog.Error("❌ upload indexing failed", "job_id", jobID, "file", filepath.Base(p), "err", err)
 				h.setProgress(jobID, fmt.Sprintf("error: %v", err))
 				return
@@ -325,10 +338,10 @@ func (h *handlers) upload(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) setProgress(jobID, msg string) {
 	h.uploadMu.Lock()
 	defer h.uploadMu.Unlock()
-	_ = jobID
-	if len(h.jobProgress) > 0 {
-		h.jobProgress[len(h.jobProgress)-1] = msg
+	if h.jobProgress == nil {
+		h.jobProgress = make(map[string]string)
 	}
+	h.jobProgress[jobID] = msg
 }
 
 func (h *handlers) uploadProgress(w http.ResponseWriter, r *http.Request) {
@@ -337,12 +350,14 @@ func (h *handlers) uploadProgress(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 
 	h.uploadMu.Lock()
-	progress := make([]string, len(h.jobProgress))
-	copy(progress, h.jobProgress)
+	progress := make(map[string]string, len(h.jobProgress))
+	for k, v := range h.jobProgress {
+		progress[k] = v
+	}
 	h.uploadMu.Unlock()
 
-	for _, p := range progress {
-		fmt.Fprintf(w, "data: %s\n\n", p)
+	for jobID, msg := range progress {
+		fmt.Fprintf(w, "data: %s: %s\n\n", jobID, msg)
 	}
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()

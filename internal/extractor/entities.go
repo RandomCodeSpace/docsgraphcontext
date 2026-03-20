@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/RandomCodeSpace/docscontext/internal/llm"
@@ -152,6 +153,7 @@ func ExtractEntities(ctx context.Context, provider llm.Provider, chunks []string
 		gleanResp = stripCodeFences(gleanResp)
 		var additional ExtractionResult
 		if err := json.Unmarshal([]byte(gleanResp), &additional); err != nil {
+			slog.Warn("⚠️ gleaning JSON parse failed", "pass", i+1, "err", err)
 			break
 		}
 
@@ -176,11 +178,19 @@ func collectEntityNames(r *ExtractionResult) []string {
 	return names
 }
 
-// mergeResults combines two extraction results, deduplicating entities by name.
+// mergeResults combines two extraction results, deduplicating entities by
+// normalized (lowercased) name and relationships by (source, target, predicate).
 func mergeResults(base, additional *ExtractionResult) ExtractionResult {
-	seen := make(map[string]bool, len(base.Entities))
+	seenEntities := make(map[string]bool, len(base.Entities))
 	for _, e := range base.Entities {
-		seen[e.Name] = true
+		seenEntities[strings.ToLower(e.Name)] = true
+	}
+
+	type relKey struct{ src, tgt, pred string }
+	seenRels := make(map[relKey]bool, len(base.Relationships))
+	for _, r := range base.Relationships {
+		key := relKey{strings.ToLower(r.Source), strings.ToLower(r.Target), strings.ToLower(r.Predicate)}
+		seenRels[key] = true
 	}
 
 	merged := ExtractionResult{
@@ -189,12 +199,19 @@ func mergeResults(base, additional *ExtractionResult) ExtractionResult {
 	}
 
 	for _, e := range additional.Entities {
-		if e.Name != "" && !seen[e.Name] {
-			seen[e.Name] = true
+		norm := strings.ToLower(e.Name)
+		if norm != "" && !seenEntities[norm] {
+			seenEntities[norm] = true
 			merged.Entities = append(merged.Entities, e)
 		}
 	}
-	merged.Relationships = append(merged.Relationships, additional.Relationships...)
+	for _, r := range additional.Relationships {
+		key := relKey{strings.ToLower(r.Source), strings.ToLower(r.Target), strings.ToLower(r.Predicate)}
+		if !seenRels[key] {
+			seenRels[key] = true
+			merged.Relationships = append(merged.Relationships, r)
+		}
+	}
 
 	return merged
 }

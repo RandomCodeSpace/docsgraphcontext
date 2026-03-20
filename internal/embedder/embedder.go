@@ -65,6 +65,11 @@ func (e *Embedder) EmbedTexts(ctx context.Context, texts []string) ([][]float32,
 					work.idx, work.idx+len(work.texts), err)
 				return
 			}
+			if len(vecs) != len(work.texts) {
+				errs[batchIdx] = fmt.Errorf("embed batch [%d:%d]: expected %d vectors, got %d",
+					work.idx, work.idx+len(work.texts), len(work.texts), len(vecs))
+				return
+			}
 			for i, vec := range vecs {
 				results[work.idx+i] = vec
 			}

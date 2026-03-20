@@ -734,12 +734,17 @@ func (p *Pipeline) Finalize(ctx context.Context, verbose bool) error {
 		}
 		vecs, err := p.embedder.EmbedTexts(ctx, descTexts)
 		if err == nil {
+			if len(vecs) != len(toEmbed) {
+				slog.Warn("⚠️ embedding count mismatch", "expected", len(toEmbed), "got", len(vecs))
+			}
 			for i, e := range toEmbed {
 				if i < len(vecs) {
 					e.Vector = vecs[i]
 				}
 			}
-			p.store.BatchUpsertEntities(ctx, toEmbed)
+			if err := p.store.BatchUpsertEntities(ctx, toEmbed); err != nil {
+				return fmt.Errorf("batch upsert entity embeddings: %w", err)
+			}
 		} else {
 			slog.Warn("⚠️ entity description embedding failed", "err", err)
 		}
